@@ -24,9 +24,9 @@ M.colorscheme_conf = {
   end,
   gruvbox_material = function()
     -- foreground option can be material, mix, or original
-    vim.g.gruvbox_material_foreground = "material"
+    vim.g.gruvbox_material_foreground = "original"
     --background option can be hard, medium, soft
-    vim.g.gruvbox_material_background = "soft"
+    vim.g.gruvbox_material_background = "medium"
     vim.g.gruvbox_material_enable_italic = 1
     vim.g.gruvbox_material_better_performance = 1
 
@@ -50,11 +50,17 @@ M.colorscheme_conf = {
   end,
   onedarkpro = function()
     -- set colorscheme after options
-    vim.cmd('colorscheme onedark_vivid')
+    vim.cmd("colorscheme onedark_vivid")
   end,
   material = function()
     vim.g.material_style = "oceanic"
-    vim.cmd('colorscheme material')
+    vim.cmd("colorscheme material")
+  end,
+  arctic = function()
+    vim.cmd("colorscheme arctic")
+  end,
+  kanagawa = function()
+    vim.cmd("colorscheme kanagawa-wave")
   end,
 }
 

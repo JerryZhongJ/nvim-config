@@ -3,6 +3,7 @@ local api = vim.api
 local keymap = vim.keymap
 local lsp = vim.lsp
 local diagnostic = vim.diagnostic
+local lspconfig = require("lspconfig")
 
 local utils = require("utils")
 
@@ -12,10 +13,10 @@ local set_qflist = function(buf_num, severity)
   diagnostics = diagnostic.get(buf_num, { severity = severity })
 
   local qf_items = diagnostic.toqflist(diagnostics)
-  vim.fn.setqflist({}, ' ', { title = 'Diagnostics', items = qf_items })
+  vim.fn.setqflist({}, " ", { title = "Diagnostics", items = qf_items })
 
   -- open quickfix by default
-  vim.cmd[[copen]]
+  vim.cmd([[copen]])
 end
 
 local custom_attach = function(client, bufnr)
@@ -38,18 +39,24 @@ local custom_attach = function(client, bufnr)
   -- this puts diagnostics from opened files to quickfix
   map("n", "<space>qw", diagnostic.setqflist, { desc = "put window diagnostics to qf" })
   -- this puts diagnostics from current buffer to quickfix
-  map("n", "<space>qb", function() set_qflist(bufnr) end, { desc = "put buffer diagnostics to qf" })
+  map("n", "<space>qb", function()
+    set_qflist(bufnr)
+  end, { desc = "put buffer diagnostics to qf" })
   map("n", "<space>ca", vim.lsp.buf.code_action, { desc = "LSP code action" })
   map("n", "<space>wa", vim.lsp.buf.add_workspace_folder, { desc = "add workspace folder" })
   map("n", "<space>wr", vim.lsp.buf.remove_workspace_folder, { desc = "remove workspace folder" })
   map("n", "<space>wl", function()
-    inspect(vim.lsp.buf.list_workspace_folders())
+    vim.print(vim.lsp.buf.list_workspace_folders())
   end, { desc = "list workspace folder" })
 
   -- Set some key bindings conditional on server capabilities
-  if client.server_capabilities.documentFormattingProvider then
-    map("n", "<space>f", vim.lsp.buf.format, { desc = "format code" })
+  if client.server_capabilities.documentFormattingProvider and client.name ~= "lua_ls" then
+    map({ "n", "x" }, "<space>f", vim.lsp.buf.format, { desc = "format code" })
   end
+
+  -- Uncomment code below to enable inlay hint from language server, some LSP server supports inlay hint,
+  -- but disable this feature by default, so you may need to enable inlay hint in the LSP server config.
+  -- vim.lsp.inlay_hint.enable(true, {buffer=bufnr})
 
   api.nvim_create_autocmd("CursorHold", {
     buffer = bufnr,
@@ -67,8 +74,9 @@ local custom_attach = function(client, bufnr)
       end
 
       local cursor_pos = api.nvim_win_get_cursor(0)
-      if (cursor_pos[1] ~= vim.b.diagnostics_pos[1] or cursor_pos[2] ~= vim.b.diagnostics_pos[2])
-          and #diagnostic.get() > 0
+      if
+        (cursor_pos[1] ~= vim.b.diagnostics_pos[1] or cursor_pos[2] ~= vim.b.diagnostics_pos[2])
+        and #diagnostic.get() > 0
       then
         diagnostic.open_float(nil, float_opts)
       end
@@ -86,20 +94,20 @@ local custom_attach = function(client, bufnr)
     ]])
 
     local gid = api.nvim_create_augroup("lsp_document_highlight", { clear = true })
-    api.nvim_create_autocmd("CursorHold" , {
+    api.nvim_create_autocmd("CursorHold", {
       group = gid,
       buffer = bufnr,
-      callback = function ()
+      callback = function()
         lsp.buf.document_highlight()
-      end
+      end,
     })
 
-    api.nvim_create_autocmd("CursorMoved" , {
+    api.nvim_create_autocmd("CursorMoved", {
       group = gid,
       buffer = bufnr,
-      callback = function ()
+      callback = function()
         lsp.buf.clear_references()
-      end
+      end,
     })
   end
 
@@ -109,65 +117,101 @@ local custom_attach = function(client, bufnr)
   end
 end
 
-local capabilities = require('cmp_nvim_lsp').default_capabilities()
+local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
-local lspconfig = require("lspconfig")
+-- required by nvim-ufo
+capabilities.textDocument.foldingRange = {
+  dynamicRegistration = false,
+  lineFoldingOnly = true,
+}
 
-if utils.executable("pylsp") then
-  local venv_path = os.getenv('VIRTUAL_ENV')
-  local py_path = nil
-  -- decide which python executable to use for mypy
-  if venv_path ~= nil then
-    py_path = venv_path .. "/bin/python3"
-  else
-    py_path = vim.g.python3_host_prog
-  end
+-- For what diagnostic is enabled in which type checking mode, check doc:
+-- https://github.com/microsoft/pyright/blob/main/docs/configuration.md#diagnostic-settings-defaults
+-- Currently, the pyright also has some issues displaying hover documentation:
+-- https://www.reddit.com/r/neovim/comments/1gdv1rc/what_is_causeing_the_lsp_hover_docs_to_looks_like/
 
-  lspconfig.pylsp.setup {
+if utils.executable("pyright") then
+  local new_capability = {
+    -- this will remove some of the diagnostics that duplicates those from ruff, idea taken and adapted from
+    -- here: https://github.com/astral-sh/ruff-lsp/issues/384#issuecomment-1989619482
+    textDocument = {
+      publishDiagnostics = {
+        tagSupport = {
+          valueSet = { 2 },
+        },
+      },
+      hover = {
+        contentFormat = { "plaintext" },
+        dynamicRegistration = true,
+      },
+    },
+  }
+  local merged_capability = vim.tbl_deep_extend("force", capabilities, new_capability)
+
+  lspconfig.pyright.setup {
+    cmd = { "delance-langserver", "--stdio" },
     on_attach = custom_attach,
+    capabilities = merged_capability,
     settings = {
-      pylsp = {
-        plugins = {
-          -- formatter options
-          black = { enabled = true },
-          autopep8 = { enabled = false },
-          yapf = { enabled = false },
-          -- linter options
-          pylint = { enabled = true, executable = "pylint" },
-          ruff = { enabled = false },
-          pyflakes = { enabled = false },
-          pycodestyle = { enabled = false },
-          -- type checker
-          pylsp_mypy = {
-            enabled = true,
-            overrides = { "--python-executable", py_path, true },
-            report_progress = true,
-            live_mode = false
+      pyright = {
+        -- disable import sorting and use Ruff for this
+        disableOrganizeImports = true,
+        disableTaggedHints = false,
+      },
+      python = {
+        analysis = {
+          autoSearchPaths = true,
+          diagnosticMode = "workspace",
+          typeCheckingMode = "standard",
+          useLibraryCodeForTypes = true,
+          -- we can this setting below to redefine some diagnostics
+          diagnosticSeverityOverrides = {
+            deprecateTypingAliases = false,
           },
-          -- auto-completion options
-          jedi_completion = { fuzzy = true },
-          -- import sorting
-          isort = { enabled = true },
+          -- inlay hint settings are provided by pylance?
+          inlayHints = {
+            callArgumentNames = "partial",
+            functionReturnTypes = true,
+            pytestParameters = true,
+            variableTypes = true,
+          },
         },
       },
     },
-    flags = {
-      debounce_text_changes = 200,
-    },
-    capabilities = capabilities,
   }
 else
-  vim.notify("pylsp not found!", vim.log.levels.WARN, { title = "Nvim-config" })
+  vim.notify("pyright not found!", vim.log.levels.WARN, { title = "Nvim-config" })
 end
 
--- if utils.executable('pyright') then
---   lspconfig.pyright.setup{
---     on_attach = custom_attach,
---     capabilities = capabilities
---   }
--- else
---   vim.notify("pyright not found!", vim.log.levels.WARN, {title = 'Nvim-config'})
--- end
+if utils.executable("ruff") then
+  require("lspconfig").ruff.setup {
+    on_attach = custom_attach,
+    capabilities = capabilities,
+    init_options = {
+      -- the settings can be found here: https://docs.astral.sh/ruff/editors/settings/
+      settings = {
+        organizeImports = true,
+      },
+    },
+  }
+end
+
+-- Disable ruff hover feature in favor of Pyright
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("lsp_attach_disable_ruff_hover", { clear = true }),
+  callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    -- vim.print(client.name, client.server_capabilities)
+
+    if client == nil then
+      return
+    end
+    if client.name == "ruff" then
+      client.server_capabilities.hoverProvider = false
+    end
+  end,
+  desc = "LSP: Disable hover capability from Ruff",
+})
 
 if utils.executable("ltex-ls") then
   lspconfig.ltex.setup {
@@ -176,11 +220,11 @@ if utils.executable("ltex-ls") then
     filetypes = { "text", "plaintex", "tex", "markdown" },
     settings = {
       ltex = {
-        language = "en"
+        language = "en",
       },
     },
     flags = { debounce_text_changes = 300 },
-}
+  }
 end
 
 if utils.executable("clangd") then
@@ -215,8 +259,8 @@ if utils.executable("bash-language-server") then
   }
 end
 
+-- settings for lua-language-server can be found on https://luals.github.io/wiki/settings/
 if utils.executable("lua-language-server") then
-  -- settings for lua-language-server can be found on https://github.com/LuaLS/lua-language-server/wiki/Settings .
   lspconfig.lua_ls.setup {
     on_attach = custom_attach,
     settings = {
@@ -225,20 +269,8 @@ if utils.executable("lua-language-server") then
           -- Tell the language server which version of Lua you're using (most likely LuaJIT in the case of Neovim)
           version = "LuaJIT",
         },
-        diagnostics = {
-          -- Get the language server to recognize the `vim` global
-          globals = { "vim" },
-        },
-        workspace = {
-          -- Make the server aware of Neovim runtime files,
-          -- see also https://github.com/LuaLS/lua-language-server/wiki/Libraries#link-to-workspace .
-          -- Lua-dev.nvim also has similar settings for lua ls, https://github.com/folke/neodev.nvim/blob/main/lua/neodev/luals.lua .
-          library = {
-            vim.env.VIMRUNTIME,
-            fn.stdpath("config"),
-          },
-          maxPreload = 2000,
-          preloadFileSize = 50000,
+        hint = {
+          enable = true,
         },
       },
     },
@@ -247,10 +279,10 @@ if utils.executable("lua-language-server") then
 end
 
 -- Change diagnostic signs.
-fn.sign_define("DiagnosticSignError", { text = '🆇', texthl = "DiagnosticSignError" })
-fn.sign_define("DiagnosticSignWarn", { text = '⚠️', texthl = "DiagnosticSignWarn" })
-fn.sign_define("DiagnosticSignInfo", { text = 'ℹ️', texthl = "DiagnosticSignInfo" })
-fn.sign_define("DiagnosticSignHint", { text = '', texthl = "DiagnosticSignHint" })
+fn.sign_define("DiagnosticSignError", { text = "🆇", texthl = "DiagnosticSignError" })
+fn.sign_define("DiagnosticSignWarn", { text = "⚠️", texthl = "DiagnosticSignWarn" })
+fn.sign_define("DiagnosticSignInfo", { text = "ℹ️", texthl = "DiagnosticSignInfo" })
+fn.sign_define("DiagnosticSignHint", { text = "", texthl = "DiagnosticSignHint" })
 
 -- global config for diagnostic
 diagnostic.config {

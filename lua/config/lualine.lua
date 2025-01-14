@@ -99,12 +99,12 @@ end
 
 local virtual_env = function()
   -- only show virtual env for Python
-  if vim.bo.filetype ~= 'python' then
+  if vim.bo.filetype ~= "python" then
     return ""
   end
 
-  local conda_env = os.getenv('CONDA_DEFAULT_ENV')
-  local venv_path = os.getenv('VIRTUAL_ENV')
+  local conda_env = os.getenv("CONDA_DEFAULT_ENV")
+  local venv_path = os.getenv("VIRTUAL_ENV")
 
   if venv_path == nil then
     if conda_env == nil then
@@ -113,53 +113,93 @@ local virtual_env = function()
       return string.format("  %s (conda)", conda_env)
     end
   else
-    local venv_name = vim.fn.fnamemodify(venv_path, ':t')
+    local venv_name = vim.fn.fnamemodify(venv_path, ":t")
     return string.format("  %s (venv)", venv_name)
   end
+end
+
+local get_active_lsp = function()
+  local msg = "No Active Lsp"
+  local buf_ft = vim.api.nvim_get_option_value("filetype", {})
+  local clients = vim.lsp.get_clients { bufnr = 0 }
+  if next(clients) == nil then
+    return msg
+  end
+
+  for _, client in ipairs(clients) do
+    ---@diagnostic disable-next-line: undefined-field
+    local filetypes = client.config.filetypes
+    if filetypes and vim.fn.index(filetypes, buf_ft) ~= -1 then
+      return client.name
+    end
+  end
+  return msg
 end
 
 require("lualine").setup {
   options = {
     icons_enabled = true,
     theme = "auto",
-    -- component_separators = { left = "", right = "" },
-    -- section_separators = { left = "", right = "" },
+    component_separators = { left = "⏐", right = "⏐" },
     section_separators = "",
-    component_separators = "",
     disabled_filetypes = {},
     always_divide_middle = true,
   },
   sections = {
-    lualine_a = { "mode" },
+    lualine_a = {
+      "mode",
+    },
     lualine_b = {
-      "branch",
+      {
+        "branch",
+        fmt = function(name, _)
+          -- truncate branch name in case the name is too long
+          return string.sub(name, 1, 20)
+        end,
+        color = { gui = "italic,bold" },
+      },
+      {
+        virtual_env,
+        color = { fg = "black", bg = "#F1CA81" },
+      },
+    },
+    lualine_c = {
+      {
+        "filename",
+        symbols = {
+          readonly = "[🔒]",
+        },
+      },
       {
         "diff",
         source = diff,
       },
       {
-        virtual_env,
-        color = { fg = 'black', bg = "#F1CA81" }
-      }
-    },
-    lualine_c = {
-      "filename",
-      {
-        ime_state,
-        color = { fg = "black", bg = "#f46868" },
+        "%S",
+        color = { gui = "bold", fg = "cyan" },
       },
       {
         spell,
         color = { fg = "black", bg = "#a7c080" },
       },
+    },
+    lualine_x = {
+      {
+        ime_state,
+        color = { fg = "black", bg = "#f46868" },
+      },
+      {
+        get_active_lsp,
+        icon = " LSP:",
+      },
       {
         "diagnostics",
         sources = { "nvim_diagnostic" },
-        symbols = {error = '🆇 ', warn = '⚠️ ', info = 'ℹ️ ', hint = ' '},
+        symbols = { error = "🆇 ", warn = "⚠️ ", info = "ℹ️ ", hint = " " },
       },
     },
-    lualine_x = {
-      "encoding",
+    lualine_y = {
+      { "encoding", fmt = string.upper },
       {
         "fileformat",
         symbols = {
@@ -170,9 +210,6 @@ require("lualine").setup {
       },
       "filetype",
     },
-    lualine_y = {
-      "location",
-    },
     lualine_z = {
       {
         trailing_space,
@@ -182,6 +219,8 @@ require("lualine").setup {
         mixed_indent,
         color = "WarningMsg",
       },
+      "location",
+      "progress",
     },
   },
   inactive_sections = {
