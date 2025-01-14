@@ -49,12 +49,6 @@ local plugin_specs = {
 
   {
     "nvim-treesitter/nvim-treesitter",
-    enabled = function()
-      if vim.g.is_mac then
-        return true
-      end
-      return false
-    end,
     event = "VeryLazy",
     build = ":TSUpdate",
     config = function()
@@ -64,7 +58,12 @@ local plugin_specs = {
 
   -- Python indent (follows the PEP8 style)
   { "Vimjas/vim-python-pep8-indent", ft = { "python" } },
-
+  -- rust lsp
+  {
+    'mrcjkb/rustaceanvim',
+    version = '^5', -- Recommended
+    lazy = false, -- This plugin is already lazy
+  },
   -- Python-related text object
   { "jeetsukumaran/vim-pythonsense", ft = { "python" } },
 
