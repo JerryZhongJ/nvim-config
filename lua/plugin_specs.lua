@@ -23,7 +23,7 @@ end
 local plugin_specs = {
   -- auto-completion engine
   {
-    "iguanacucumber/magazine.nvim",
+    "hrsh7th/nvim-cmp",
     name = "nvim-cmp",
     -- event = 'InsertEnter',
     event = "VeryLazy",
@@ -39,6 +39,7 @@ local plugin_specs = {
       require("config.nvim-cmp")
     end,
   },
+
   {
     "neovim/nvim-lspconfig",
     event = { "BufRead", "BufNewFile" },
@@ -65,6 +66,14 @@ local plugin_specs = {
   -- Python-related text object
   { "jeetsukumaran/vim-pythonsense", ft = { "python" } },
 
+  {
+    "nvim-treesitter/nvim-treesitter-textobjects",
+    event = "VeryLazy",
+    branch = "master",
+    config = function()
+      require("config.treesitter-textobjects")
+    end,
+  },
   { "machakann/vim-swap", event = "VeryLazy" },
 
   -- IDE for Lisp
@@ -278,14 +287,8 @@ local plugin_specs = {
   -- Multiple cursor plugin like Sublime Text?
   -- 'mg979/vim-visual-multi'
 
-  -- Autosave files on certain events
-  { "907th/vim-auto-save", event = "InsertEnter" },
-
   -- Show undo history visually
   { "simnalamburt/vim-mundo", cmd = { "MundoToggle", "MundoShow" } },
-
-  -- better UI for some nvim actions
-  { "stevearc/dressing.nvim" },
 
   -- Manage your yank history
   {
@@ -387,7 +390,7 @@ local plugin_specs = {
       end
       return false
     end,
-    build = "cd app && npm install",
+    build = "cd app && npm install && git restore .",
     ft = { "markdown" },
   },
 
@@ -513,7 +516,23 @@ local plugin_specs = {
       require("config.which-key")
     end,
   },
-
+  {
+    "folke/snacks.nvim",
+    priority = 1000,
+    lazy = false,
+    opts = {
+      -- more beautiful vim.ui.input
+      input = {
+        enabled = true,
+        win = {
+          relative = "cursor",
+          backdrop = true,
+        },
+      },
+      -- more beautiful vim.ui.select
+      picker = { enabled = true },
+    },
+  },
   -- show and trim trailing whitespaces
   { "jdhao/whitespace.nvim", event = "VeryLazy" },
 
@@ -586,6 +605,12 @@ local plugin_specs = {
     opts = {
       rocks = { "lua-toml" }, -- specifies a list of rocks to install
       -- luarocks_build_args = { "--with-lua=/my/path" }, -- extra options to pass to luarocks's configuration script
+    },
+  },
+  {
+    "catgoose/nvim-colorizer.lua",
+    event = "BufReadPre",
+    opts = { -- set to setup table
     },
   },
 }
